@@ -141,41 +141,191 @@ for (const link of document.querySelectorAll("[data-service]")) {
     form.elements.service.value = link.dataset.service;
   });
 }
-const enquiryStatus = document.querySelector("#enquiry-status");
 const submitEnquiry = form.querySelector('button[type="submit"]');
+
+// Mobile number: +91 is fixed, the visitor types exactly 10 digits.
+const phoneInput = form.elements.phone;
+const phoneError = document.querySelector("#phone-error");
+const PHONE_MESSAGE = "Please enter a valid 10-digit mobile number.";
+
+function phoneDigits(value) {
+  let digits = value.replace(/\D/g, "");
+  // Pasted "+91 98765 43210" or "098765 43210": drop the country code / leading 0.
+  if (digits.length > 10 && digits.startsWith("91")) digits = digits.slice(2);
+  if (digits.length > 10 && digits.startsWith("0")) digits = digits.slice(1);
+  return digits.slice(0, 10);
+}
+
+function checkPhone({ show }) {
+  const valid = /^\d{10}$/.test(phoneInput.value);
+  phoneInput.setCustomValidity(valid ? "" : PHONE_MESSAGE);
+  if (valid || show) {
+    phoneInput.setAttribute("aria-invalid", String(!valid));
+    phoneError.textContent = valid ? "" : PHONE_MESSAGE;
+    phoneError.hidden = valid;
+  }
+  return valid;
+}
+
+// Keep only digits while typing or pasting (maxlength is lifted briefly so a paste isn't cut short).
+phoneInput.addEventListener("beforeinput", () => phoneInput.removeAttribute("maxlength"));
+phoneInput.addEventListener("input", () => {
+  const digits = phoneDigits(phoneInput.value);
+  if (phoneInput.value !== digits) phoneInput.value = digits;
+  phoneInput.maxLength = 10;
+  // Only show the error once they've left the field; clear it as soon as it's fixed.
+  checkPhone({ show: phoneInput.getAttribute("aria-invalid") === "true" });
+});
+phoneInput.addEventListener("blur", () => {
+  if (phoneInput.value) checkPhone({ show: true });
+});
+phoneInput.addEventListener("invalid", () => checkPhone({ show: true }));
+form.addEventListener("reset", () => {
+  phoneInput.removeAttribute("aria-invalid");
+  phoneInput.setCustomValidity("");
+  phoneError.hidden = true;
+});
+checkPhone({ show: false });
+const SUBMIT_TIMEOUT_MS = 20000;
+const SUCCESS_AUTOCLOSE_MS = 6000;
+let sending = false;
+
+// Overlay shown on top of the form: "Sending…" → success / error message.
+const overlay = document.querySelector("#enquiry-status");
+const overlayTitle = overlay.querySelector(".form-overlay-title");
+const overlayText = overlay.querySelector(".form-overlay-text");
+const overlayClose = overlay.querySelector(".form-overlay-close");
+
+function showOverlay(state, title, text, { autoCloseMs = 0, closeLabel = "Close" } = {}) {
+  overlay.hidden = false;
+  overlay.dataset.state = state;
+  overlayTitle.textContent = title;
+  overlayText.textContent = text;
+  overlayClose.textContent = closeLabel;
+  overlayClose.hidden = state === "sending";
+  stopAutoClose();
+  if (autoCloseMs) startAutoClose(autoCloseMs);
+}
+
+// Auto-close countdown. A timer does the closing; the shrinking bar just shows it.
+// Hovering the card pauses both.
+let autoCloseTimer;
+let autoCloseLeft = 0;
+let autoCloseStarted = 0;
+
+function startAutoClose(ms) {
+  autoCloseLeft = ms;
+  overlay.style.setProperty("--autoclose", `${ms}ms`);
+  overlay.dataset.autoclose = "";
+  resumeAutoClose();
+}
+function resumeAutoClose() {
+  if (!autoCloseLeft || overlay.hidden) return;
+  autoCloseStarted = Date.now();
+  clearTimeout(autoCloseTimer);
+  autoCloseTimer = setTimeout(closeOverlay, autoCloseLeft);
+  overlay.classList.remove("is-paused");
+}
+function pauseAutoClose() {
+  if (!autoCloseLeft) return;
+  clearTimeout(autoCloseTimer);
+  autoCloseLeft = Math.max(0, autoCloseLeft - (Date.now() - autoCloseStarted));
+  overlay.classList.add("is-paused");
+}
+function stopAutoClose() {
+  clearTimeout(autoCloseTimer);
+  autoCloseLeft = 0;
+  delete overlay.dataset.autoclose;
+  overlay.classList.remove("is-paused");
+}
+
+function closeOverlay() {
+  if (overlay.hidden || sending) return;
+  const hadFocus = overlay.contains(document.activeElement);
+  const wasError = overlay.dataset.state === "error";
+  stopAutoClose();
+  overlay.hidden = true;
+  // Only move focus if it was inside the overlay, so an auto-close never yanks the page.
+  if (hadFocus) (wasError ? submitEnquiry : form.elements.name).focus();
+}
+
+overlayClose.addEventListener("click", closeOverlay);
+overlay.addEventListener("pointerenter", pauseAutoClose);
+overlay.addEventListener("pointerleave", resumeAutoClose);
+form.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !overlay.hidden) closeOverlay();
+});
+
+// Lock every field while the enquiry is being sent.
+function setSending(isSending) {
+  sending = isSending;
+  form.setAttribute("aria-busy", String(isSending));
+  for (const field of form.elements) {
+    if (field !== overlayClose) field.disabled = isSending;
+  }
+}
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  if (submitEnquiry.disabled) return;
+  if (sending) return;
 
-  enquiryStatus.hidden = false;
   const endpoint = form.dataset.endpoint.trim();
   if (!endpoint) {
-    enquiryStatus.textContent =
-      "Online enquiries are unavailable. You can email us at info@gupshaap.com.";
+    showOverlay(
+      "error",
+      "Online enquiries are unavailable",
+      "You can email us at info@gupshaap.com.",
+    );
+    overlayClose.focus();
     return;
   }
 
-  submitEnquiry.disabled = true;
-  enquiryStatus.textContent = "Sending your enquiry…";
+  // Read the values before the fields are disabled (disabled fields are left out of FormData).
+  // Sent URL-encoded so Google Apps Script receives it in e.parameter without a CORS preflight.
+  if (!checkPhone({ show: true })) {
+    phoneInput.focus();
+    return;
+  }
+  const body = new URLSearchParams(new FormData(form));
+  body.set("phone", `+91-${phoneInput.value}`);
+  const name = (form.elements.name.value || "").trim().split(/\s+/)[0];
+
+  setSending(true);
+  showOverlay("sending", "Sending your enquiry…", "This only takes a moment.");
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SUBMIT_TIMEOUT_MS);
   try {
-    // Sent as URL-encoded form data so Google Apps Script receives it in e.parameter
-    // without a CORS preflight.
     const response = await fetch(endpoint, {
       method: "POST",
-      body: new URLSearchParams(new FormData(form)),
+      body,
+      signal: controller.signal,
     });
     if (!response.ok) throw new Error("Enquiry submission failed");
     const result = await response.json().catch(() => ({}));
-    if (result.result !== "success")
-      throw new Error("Enquiry was not saved");
+    if (result.result !== "success") throw new Error("Enquiry was not saved");
+
+    setSending(false);
     form.reset();
-    enquiryStatus.textContent =
-      "Thanks for reaching out. We’ve received your enquiry.";
-  } catch {
-    enquiryStatus.textContent =
-      "We couldn’t send your enquiry. Please try again or email info@gupshaap.com.";
+    showOverlay(
+      "success",
+      `Thanks${name ? `, ${name}` : ""}!`,
+      "We’ve received your enquiry. We’ll be in touch soon.",
+      { autoCloseMs: SUCCESS_AUTOCLOSE_MS },
+    );
+  } catch (error) {
+    setSending(false); // keep what they typed so they can retry
+    showOverlay(
+      "error",
+      "That didn’t go through",
+      error.name === "AbortError"
+        ? "This is taking longer than expected. Please try again, or email info@gupshaap.com."
+        : "Please try again, or email info@gupshaap.com.",
+      { closeLabel: "Try again" },
+    );
   } finally {
-    submitEnquiry.disabled = false;
+    clearTimeout(timeout);
   }
+  overlayClose.focus({ preventScroll: true });
+  overlay.scrollIntoView({ block: "nearest", behavior: "smooth" });
 });

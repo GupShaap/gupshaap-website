@@ -122,11 +122,75 @@ h2{font-size:clamp(35px,4.9vw,72px);margin:0 0 24px;text-wrap:balance}
 form{display:grid;gap:15px}
 form .button{justify-self:start}
 .form-trap{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}
+
+/* Overlay on top of the form: "Sending…" then the result. */
+form{position:relative}
+.form-overlay{position:absolute;inset:-12px;z-index:3;display:grid;place-items:center;padding:16px;border-radius:18px;background:#6b2547e0;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+.form-overlay[hidden]{display:none}
+.form-overlay-card{position:relative;overflow:hidden;display:grid;justify-items:center;gap:10px;width:min(100%,380px);padding:30px 24px 28px;border:1px solid var(--plum);border-radius:18px;background:var(--cream);color:var(--plum);text-align:center;box-shadow:0 18px 40px #26121b59}
+.form-overlay-icon{display:grid;place-items:center;width:54px;height:54px;border:1px solid var(--plum);border-radius:50%;font:700 26px/1 Georgia,serif}
+.form-overlay[data-state="success"] .form-overlay-icon{background:var(--lime)}
+.form-overlay[data-state="success"] .form-overlay-icon::before{content:"✓"}
+.form-overlay[data-state="error"] .form-overlay-icon{background:var(--blush)}
+.form-overlay[data-state="error"] .form-overlay-icon::before{content:"!"}
+.form-overlay[data-state="sending"] .form-overlay-icon{border:4px solid var(--blush);border-top-color:var(--plum);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.form-overlay-title{margin:4px 0 0;font:700 clamp(1.35rem,4vw,1.6rem)/1.15 Georgia,serif;letter-spacing:-.02em}
+.form-overlay-text{margin:0;max-width:30ch}
+.form-overlay .form-overlay-close{justify-self:center;margin-top:10px}
+.form-overlay-close[hidden]{display:none}
+/* Countdown bar for auto-close (timing lives in js/script.js). */
+.form-overlay-timer{position:absolute;left:0;bottom:0;width:100%;height:5px;background:var(--lime);transform-origin:left}
+.form-overlay:not([data-autoclose]) .form-overlay-timer{display:none}
+.form-overlay[data-autoclose] .form-overlay-timer{animation:overlay-timer var(--autoclose,6s) linear forwards}
+.form-overlay.is-paused .form-overlay-timer{animation-play-state:paused}
+@keyframes overlay-timer{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+@media(prefers-reduced-motion:no-preference){
+  .form-overlay:not([hidden]){animation:overlay-fade .2s ease both}
+  .form-overlay:not([hidden]) .form-overlay-card{animation:overlay-pop .25s cubic-bezier(.2,.8,.3,1.2) both}
+}
+@media(prefers-reduced-motion:reduce){.form-overlay[data-state="sending"] .form-overlay-icon{animation-duration:2s}}
+@keyframes overlay-fade{from{opacity:0}}
+@keyframes overlay-pop{from{opacity:0;transform:scale(.94) translateY(8px)}}
 label{display:grid;gap:5px;font-weight:700;font-size:.9rem}
 input,select,textarea{border:1px solid var(--blush);border-radius:var(--radius-small);background:var(--cream);color:var(--plum);padding:10px;width:100%}
+/* Mobile number: fixed +91 prefix joined to the input. */
+.phone-field{display:flex;align-items:stretch}
+.phone-prefix{display:flex;align-items:center;padding:0 12px;border:1px solid var(--blush);border-right:0;border-radius:var(--radius-small) 0 0 var(--radius-small);background:var(--blush);color:var(--plum);font-weight:750;font-size:1rem}
+.phone-field input{min-width:0;border-radius:0 var(--radius-small) var(--radius-small) 0;font-variant-numeric:tabular-nums;letter-spacing:.04em}
+.phone-field input::placeholder{letter-spacing:0;color:#6b254780}
+.phone-field:has(input[aria-invalid="true"]) :is(.phone-prefix,input){border-color:#ffb3c4;box-shadow:0 0 0 1px #ffb3c4}
+.field-error{font-weight:600;font-size:.85rem;color:#ffd6df}
+.field-error::before{content:"⚠ "}
+.field-error[hidden]{display:none}
+/* Focus ring for form fields: hugs the box instead of floating 5px away.
+   The mobile field rings the +91 prefix and input together, so no stray line appears between them. */
+form :is(input,select,textarea):focus-visible{outline:none;border-color:var(--lime);box-shadow:0 0 0 2px var(--lime)}
+.phone-field input:focus-visible{box-shadow:none;border-color:var(--blush)}
+.phone-field{border-radius:var(--radius-small)}
+.phone-field:has(input:focus-visible){box-shadow:0 0 0 2px var(--lime)}
+.phone-field:has(input:focus-visible) :is(.phone-prefix,input){border-color:var(--lime)}
 textarea{min-height:100px;resize:vertical}
 body > footer{background:#000;color:var(--cream);padding-block:32px}
-.footer-row{display:flex;justify-content:space-between;align-items:center;gap:12px 24px;flex-wrap:wrap;font-size:.9rem}
+/* Footer: row 1 = social icons, row 2 = copyright + back-to-top. */
+.footer-inner{display:grid;gap:22px}
+.footer-social{display:flex;align-items:center;justify-content:center;gap:12px}
+.footer-icon,.footer-top{display:inline-grid;place-items:center;flex:none;width:44px;height:44px;border-radius:50%;text-decoration:none}
+.footer-icon{border:1px solid #f3c9d466;color:var(--blush)}
+.footer-icon:hover{background:var(--blush);border-color:var(--blush);color:#000}
+/* Three columns: empty 44px | centred copyright | 44px button, so the text is always exactly centred. */
+.footer-bottom{display:grid;grid-template-columns:44px 1fr 44px;align-items:center;gap:12px;padding-top:22px;border-top:1px solid #f6f0e626}
+.footer-copy{grid-column:2;margin:0;font-size:.9rem;color:#f6f0e6cc;text-align:center;text-wrap:balance}
+.footer-top{grid-column:3;justify-self:end;border:1px solid var(--lime);background:var(--lime);color:var(--plum)}
+.footer-top:hover{background:var(--blush);border-color:var(--blush)}
+@media(prefers-reduced-motion:no-preference){
+  .footer-icon,.footer-top{transition:background-color .2s ease,color .2s ease,border-color .2s ease,transform .2s ease}
+  .footer-icon:hover,.footer-top:hover{transform:translateY(-2px)}
+}
+@media(max-width:680px){
+  body > footer{padding-block:28px}
+  .footer-copy{font-size:.82rem}
+}
 @media(max-width:900px){.wrap{width:calc(100% - 48px)}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 
@@ -155,9 +219,6 @@ body > footer{background:#000;color:var(--cream);padding-block:32px}
 .hero-copy{display:grid;justify-items:center;gap:clamp(20px,3vw,42px);padding-block:clamp(32px,5vw,68px)}
 .split > h2{margin-bottom:0}
 .contact .split > div > p{max-width:45ch;margin:0}
-.footer-row a{text-underline-offset:4px}
-.footer-row .instagram{display:inline-flex;align-items:center;gap:8px;min-height:44px;color:var(--blush)}
-.footer-row .instagram:hover{color:var(--cream)}
 
 /* Decorative marks echo the hero's speech bubble. */
 .hero-copy{position:relative}
@@ -280,3 +341,64 @@ body > footer{background:#000;color:var(--cream);padding-block:32px}
 .marketing-page h1{font-size:clamp(48px,9vw,132px);margin:0 0 18px}
 .marketing-page p{margin:0;font:italic 700 clamp(22px,3vw,38px)/1.25 Georgia,serif}
 nav a[aria-current="page"]{text-decoration:underline;text-underline-offset:4px}
+
+/* ---------- Mobile ---------- */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+
+/* Menu button (shown only on small screens, and only once js/nav.js has run). */
+.menu-toggle{display:none}
+.menu-toggle{
+  align-items:center;
+  gap:10px;
+  min-height:44px;
+  padding:8px 16px;
+  border:1px solid var(--plum);
+  border-radius:100px;
+  background:transparent;
+  color:var(--plum);
+  font-weight:750;
+  font-size:.9rem;
+  cursor:pointer;
+}
+.menu-icon,.menu-icon::before,.menu-icon::after{display:block;width:18px;height:2px;border-radius:2px;background:currentColor}
+.menu-icon{position:relative}
+.menu-icon::before,.menu-icon::after{content:"";position:absolute;left:0}
+.menu-icon::before{top:-6px}
+.menu-icon::after{top:6px}
+.menu-open .menu-icon{background:transparent}
+.menu-open .menu-icon::before{top:0;transform:rotate(45deg)}
+.menu-open .menu-icon::after{top:0;transform:rotate(-45deg)}
+@media(prefers-reduced-motion:no-preference){
+  .menu-icon::before,.menu-icon::after{transition:transform .2s ease,top .2s ease}
+}
+
+@media(max-width:680px){
+  .menu-ready .menu-toggle{display:inline-flex}
+  .menu-ready .nav{flex-wrap:nowrap;min-height:64px;padding-block:10px}
+  .menu-ready nav{
+    display:none;
+    position:absolute;
+    top:100%;
+    left:0;
+    right:0;
+    flex-direction:column;
+    align-items:stretch;
+    gap:0;
+    padding:4px 16px 20px;
+    background:var(--cream);
+    border-bottom:1px solid var(--plum);
+    box-shadow:0 14px 24px #26121b26;
+    font-size:1.05rem;
+  }
+  .menu-open nav{display:flex}
+  .menu-ready nav a:not(.button){padding:14px 2px;border-bottom:1px solid #6b254726}
+  .menu-ready nav .button{margin-top:18px;padding:13px 20px;font-size:1rem}
+  /* Shorter header, so anchor jumps need less offset. */
+  .menu-ready ~ main,.menu-ready ~ main section[id]{scroll-margin-top:80px}
+}
+
+/* Very narrow phones: give the service cards more room for their text. */
+@media(max-width:420px){
+  .service-list.is-stacked{--stacked-card-width:min(310px, 90%)}
+  .service-row{padding-inline:31px}
+}
