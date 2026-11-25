@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+._*
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# Backups and local-only files
+*.bak
+*.original.html
+*.zip
+
+# Secrets (never commit these)
+.env
+.env.*
